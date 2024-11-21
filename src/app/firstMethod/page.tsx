@@ -11,12 +11,12 @@ export default function Method1Page() {
     const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
     const [mousePos, setMousePos] = useState<[number, number]>([0, 0]);
     const [canvasCircleShown, setCanvasCircleShown] = useState<boolean>(false);
+    const [isMouseDown, setIsMouseDown] = useState<boolean>(false);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        // Set canvas size to match container
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
 
@@ -34,12 +34,41 @@ export default function Method1Page() {
 
     const mouseLeave = () => {
         setCanvasCircleShown(true);
-        setIsDrawing(false);
-    }
-
-    const mouseEnter = () => {
+        setIsDrawing(false);  // Stop drawing when leaving canvas
+    };
+    
+    const mouseEnter = (e: React.MouseEvent) => {
         setCanvasCircleShown(false);
-    }
+        if (isMouseDown) {
+            // Start a new path at the entry point instead of connecting to the leave point
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+    
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+    
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+    
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            setIsDrawing(true);
+            
+            ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+            ctx.lineWidth = brushSize;
+        }
+    };
+    
+    const mouseDown = (e: React.MouseEvent) => {
+        setIsMouseDown(true);
+        startDrawing(e);
+    };
+    
+    const mouseUp = () => {
+        setIsMouseDown(false);
+        setIsDrawing(false);  // Ensure drawing is stopped
+    };
 
     const startDrawing = (e: React.MouseEvent) => {
         const canvas = canvasRef.current;
@@ -79,7 +108,6 @@ export default function Method1Page() {
 
     const stopDrawing = () => {
         setIsDrawing(false);
-
     };
 
     return (
@@ -135,9 +163,9 @@ export default function Method1Page() {
             <canvas
                 ref={canvasRef}
                 className="border-2 border-black h-full bg-white cursor-none"
-                onMouseDown={startDrawing}
+                onMouseDown={mouseDown}
                 onMouseMove={handleMouseMove}
-                onMouseUp={stopDrawing}
+                onMouseUp={mouseUp}
                 onMouseLeave={mouseLeave}
                 onMouseEnter={mouseEnter}
             />
