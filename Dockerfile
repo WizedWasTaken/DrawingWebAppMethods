@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies with relaxed peer dependency checks
+RUN npm install --legacy-peer-deps
 
 # Copy the rest of the application
 COPY . .
@@ -27,8 +27,8 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/public ./public
 
-# Install only production dependencies
-RUN npm install --production --force
+# Install only production dependencies with relaxed peer dependency checks
+RUN npm install --production --legacy-peer-deps
 
 # Set environment variable for CapRover
 ENV PORT=3000
