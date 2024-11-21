@@ -34,7 +34,7 @@ export default function Method1Page() {
 
     const mouseLeave = () => {
         setCanvasCircleShown(true);
-        setIsDrawing(false);  // Stop drawing when leaving canvas
+        stopDrawing();
     };
     
     const mouseEnter = (e: React.MouseEvent) => {
@@ -67,7 +67,7 @@ export default function Method1Page() {
     
     const mouseUp = () => {
         setIsMouseDown(false);
-        setIsDrawing(false);  // Ensure drawing is stopped
+        stopDrawing();
     };
 
     const startDrawing = (e: React.MouseEvent) => {
