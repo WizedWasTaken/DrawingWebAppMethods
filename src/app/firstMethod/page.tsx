@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState, useEffect } from 'react';
-import CanvasCircle from "@/components/canvasCircle"
+import CustomCursor from "@/components/CustomCursor"
 import { ColorPicker } from '@/components/ui/colorPicker';
 
 export default function Method1Page() {
@@ -32,11 +32,12 @@ export default function Method1Page() {
         draw(e);
     };
 
-    const mouseLeave = (e: React.MouseEvent) => {
+    const mouseLeave = () => {
         setCanvasCircleShown(true);
+        setIsDrawing(false);
     }
 
-    const mouseEnter = (e: React.MouseEvent) => {
+    const mouseEnter = () => {
         setCanvasCircleShown(false);
     }
 
@@ -141,13 +142,12 @@ export default function Method1Page() {
                 onMouseEnter={mouseEnter}
             />
 
-            <div className={canvasCircleShown === false ? "block" : "hidden"}>
-                <CanvasCircle
-                    brushSize={brushSize}
-                    color={tool === 'eraser' ? '#000000' : color}
-                    mouseLocation={mousePos}
-                />
-            </div>
+            <CustomCursor
+                brushSize={brushSize}
+                color={tool === 'eraser' ? '#000000' : color}
+                hidden={canvasCircleShown}
+                mouseLocation={mousePos}
+            />
         </main>
     )
 }

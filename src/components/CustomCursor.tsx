@@ -1,12 +1,14 @@
-interface CanvasCircleProps {
+interface CustomCursorProps {
     brushSize: number;
     color: string;
     mouseLocation: [number, number];
+    hidden: boolean; 
 }
 
-export default function CanvasCircle({ brushSize, color, mouseLocation }: CanvasCircleProps) {
+export default function CustomCursor({ brushSize, color, mouseLocation, hidden }: CustomCursorProps) {
     return (
         <div
+            className={hidden ? "hidden" : "block"}
             style={{
                 position: 'fixed',
                 left: mouseLocation[0],
