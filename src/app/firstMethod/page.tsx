@@ -12,6 +12,7 @@ export default function Method1Page() {
     const [mousePos, setMousePos] = useState<[number, number]>([0, 0]);
     const [canvasCircleShown, setCanvasCircleShown] = useState<boolean>(false);
     const [isMouseDown, setIsMouseDown] = useState<boolean>(false);
+    const lastPosRef = useRef<{x: number, y: number} | undefined>(undefined);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -27,12 +28,37 @@ export default function Method1Page() {
         ctx.lineJoin = 'round';
     }, []);
 
+    useEffect(() => {
+        document.addEventListener('mouseup', mouseUp);
+
+        return () => {
+            document.removeEventListener('mouseup', mouseUp);
+        };
+    }, []);
+
     const handleMouseMove = (e: React.MouseEvent) => {
         setMousePos([e.clientX, e.clientY]);
         draw(e);
     };
 
-    const mouseLeave = () => {
+    const mouseLeave = (e: React.MouseEvent) => {
+        if (isDrawing) {
+            // Draw a line to the canvas border when leaving
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+    
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+    
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+    
+            if (lastPosRef.current) {
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            }
+        }
         setCanvasCircleShown(true);
         stopDrawing();
     };
@@ -54,6 +80,7 @@ export default function Method1Page() {
             ctx.beginPath();
             ctx.moveTo(x, y);
             setIsDrawing(true);
+            lastPosRef.current = {x, y};
             
             ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
             ctx.lineWidth = brushSize;
@@ -84,6 +111,7 @@ export default function Method1Page() {
         ctx.beginPath();
         ctx.moveTo(x, y);
         setIsDrawing(true);
+        lastPosRef.current = {x, y};
 
         ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
         ctx.lineWidth = brushSize;
@@ -102,12 +130,32 @@ export default function Method1Page() {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        ctx.lineTo(x, y);
-        ctx.stroke();
+        if (lastPosRef.current) {
+            // Calculate points between last position and current position
+            const lastX = lastPosRef.current.x;
+            const lastY = lastPosRef.current.y;
+            const dx = x - lastX;
+            const dy = y - lastY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const steps = Math.max(Math.floor(distance / 2), 1);
+
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
+                const interpX = lastX + dx * t;
+                const interpY = lastY + dy * t;
+                ctx.lineTo(interpX, interpY);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(interpX, interpY);
+            }
+        }
+
+        lastPosRef.current = {x, y};
     };
 
     const stopDrawing = () => {
         setIsDrawing(false);
+        lastPosRef.current = undefined;
     };
 
     return (
@@ -165,7 +213,6 @@ export default function Method1Page() {
                 className="border-2 border-black h-full bg-white cursor-none"
                 onMouseDown={mouseDown}
                 onMouseMove={handleMouseMove}
-                onMouseUp={mouseUp}
                 onMouseLeave={mouseLeave}
                 onMouseEnter={mouseEnter}
             />
