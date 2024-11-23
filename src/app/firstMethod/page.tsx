@@ -8,7 +8,7 @@ export default function Method1Page() {
     const [isDrawing, setIsDrawing] = useState(false);
     const [color, setColor] = useState('#000000');
     const [brushSize, setBrushSize] = useState(5);
-    const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
+    const [tool, setTool] = useState<'brush' | 'eraser' | 'fill'>('brush');
     const [mousePos, setMousePos] = useState<[number, number]>([0, 0]);
     const [canvasCircleShown, setCanvasCircleShown] = useState<boolean>(false);
     const [isMouseDown, setIsMouseDown] = useState<boolean>(false);
@@ -88,6 +88,16 @@ export default function Method1Page() {
     };
     
     const mouseDown = (e: React.MouseEvent) => {
+        if (tool === 'fill') {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor(e.clientX - rect.left);
+            const y = Math.floor(e.clientY - rect.top);
+            floodFill(x, y);
+            return;
+        }
+
         setIsMouseDown(true);
         startDrawing(e);
     };
@@ -158,6 +168,65 @@ export default function Method1Page() {
         lastPosRef.current = undefined;
     };
 
+    const colorMatch = (pos: number, targetR: number, targetG: number, targetB: number, targetA: number, pixels: Uint8ClampedArray) => {
+        const tolerance = 30; // Adjust this value to be more or less strict
+        return Math.abs(pixels[pos] - targetR) <= tolerance &&
+               Math.abs(pixels[pos + 1] - targetG) <= tolerance &&
+               Math.abs(pixels[pos + 2] - targetB) <= tolerance &&
+               Math.abs(pixels[pos + 3] - targetA) <= tolerance;
+    };
+
+    const floodFill = (startX: number, startY: number) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = imageData.data;
+
+        // Get target color from clicked pixel
+        const startPos = (startY * canvas.width + startX) * 4;
+        const targetR = pixels[startPos];
+        const targetG = pixels[startPos + 1];
+        const targetB = pixels[startPos + 2];
+        const targetA = pixels[startPos + 3];
+
+        // Convert fill color from hex to RGBA
+        const fillColor = document.createElement('canvas').getContext('2d')!;
+        fillColor.fillStyle = color;
+        fillColor.fillRect(0, 0, 1, 1);
+        const fillRGBA = fillColor.getImageData(0, 0, 1, 1).data;
+
+        // Don't fill if clicking on same color (with tolerance)
+        if (colorMatch(startPos, fillRGBA[0], fillRGBA[1], fillRGBA[2], fillRGBA[3], pixels)) return;
+
+        const stack: [number, number][] = [[startX, startY]];
+
+        while (stack.length) {
+            const [x, y] = stack.pop()!;
+            const pos = (y * canvas.width + x) * 4;
+
+            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
+            if (!colorMatch(pos, targetR, targetG, targetB, targetA, pixels)) continue;
+
+            // Fill pixel
+            pixels[pos] = fillRGBA[0];
+            pixels[pos + 1] = fillRGBA[1];
+            pixels[pos + 2] = fillRGBA[2];
+            pixels[pos + 3] = fillRGBA[3];
+
+            // Check diagonals as well for better fill
+            stack.push(
+                [x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1],
+                [x + 1, y + 1], [x - 1, y - 1], [x + 1, y - 1], [x - 1, y + 1]
+            );
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+    };
+
     return (
         <main className="p-5 flex h-screen justify-center gap-5 align-center flex-col">
             <h1 className="text-5xl text-bold text-center">Måde 1</h1>
@@ -195,6 +264,12 @@ export default function Method1Page() {
                     onClick={() => setTool('eraser')}
                 >
                     Eraser
+                </button>
+                <button
+                    className={`px-4 py-2 rounded ${tool === 'fill' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+                    onClick={() => setTool('fill')}
+                >
+                    Fill
                 </button>
                 <button
                     className="px-4 py-2 rounded bg-red-500 text-white"
