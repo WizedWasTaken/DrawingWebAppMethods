@@ -129,7 +129,6 @@ export default function Method1Page() {
     const mouseEnter = (e: React.MouseEvent) => {
         setCanvasCircleShown(false);
         if (isMouseDown) {
-            // Start a new path at the entry point instead of connecting to the leave point
             const canvas = canvasRef.current;
             if (!canvas) return;
 
@@ -145,7 +144,14 @@ export default function Method1Page() {
             setIsDrawing(true);
             lastPosRef.current = { x, y };
 
-            ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+            // Set composite operation based on tool
+            if (tool === 'eraser') {
+                ctx.globalCompositeOperation = 'destination-out';
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            ctx.strokeStyle = tool === 'eraser' ? 'rgba(0,0,0,1)' : color;
             ctx.lineWidth = brushSize;
         }
     };
@@ -187,7 +193,14 @@ export default function Method1Page() {
         setIsDrawing(true);
         lastPosRef.current = { x, y };
 
-        ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+        // Set composite operation based on tool
+        if (tool === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out';
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
+        ctx.strokeStyle = tool === 'eraser' ? 'rgba(0,0,0,1)' : color;
         ctx.lineWidth = brushSize;
     };
 
