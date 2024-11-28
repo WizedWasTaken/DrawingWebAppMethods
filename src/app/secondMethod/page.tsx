@@ -7,12 +7,12 @@ import { useState, useRef, useEffect } from "react";
 export default function Method2Page() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [color, setColor] = useState("#000000");
-    const [brushSize, setBrushSize] = useState(3);
+    const [brushSize, setBrushSize] = useState(20);
     const [isDrawing, setIsDrawing] = useState(false);
     const [tool, setTool] = useState<'brush' | 'eraser' | 'fill'>('brush');
     const [undoStack, setUndoStack] = useState<string[]>([]);
     const [mousePosition, setMousePosition] = useState<[number, number]>([0, 0]);
-    const [isCursorInCanvas, setIsCursorInCanvas] = useState<boolean>(false);
+    const [isCursorInCanvas, setIsCursorInCanvas] = useState<boolean>(true);
     const lastPos = useRef<{ x: number; y: number } | null>(null);
 
     // On Loads
@@ -22,14 +22,35 @@ export default function Method2Page() {
 
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
-
-        saveState();
     }, []);
 
+    // set mouse position on mouse move
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            setMousePosition([e.clientX, e.clientY]);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+        };
+    })
+
     const saveState = () => {
+        console.info('saveState: ' + undoStack.length);
         const canvas = canvasRef.current;
         if (!canvas) return;
-        setUndoStack(prev => [...prev, canvas.toDataURL()]);
+
+        // Use callback form to ensure we're working with the latest state
+        setUndoStack(prev => {
+            const currentState = canvas.toDataURL();
+            // Only add if it's different from the last state
+            if (prev[prev.length - 1] !== currentState) {
+                return [...prev, currentState];
+            }
+            return prev;
+        });
     };
 
     const draw = (e: React.MouseEvent) => {
@@ -57,7 +78,11 @@ export default function Method2Page() {
 
     const startDrawing = (e: React.MouseEvent) => {
         if (tool === 'fill') {
-            floodFill(e);
+            const rect = canvasRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            floodFill(x, y);
             return;
         }
         setIsDrawing(true);
@@ -67,10 +92,16 @@ export default function Method2Page() {
             x: e.clientX - rect.left,
             y: e.clientY - rect.top
         };
+        // Save initial state when starting to draw
+        saveState();
     };
 
-    const stopDrawing = () => {
+    const mouseLeave = () => {
         setIsCursorInCanvas(false);
+        stopDrawing();
+    }
+
+    const stopDrawing = () => {
         if (isDrawing) {
             setIsDrawing(false);
             lastPos.current = null;
@@ -78,80 +109,106 @@ export default function Method2Page() {
         }
     };
 
-    const floodFill = (e: React.MouseEvent) => {
+    const colorMatch = (pos: number, targetR: number, targetG: number, targetB: number, targetA: number, pixels: Uint8ClampedArray) => {
+        const tolerance = 30; // Adjust this value to be more or less strict
+        return Math.abs(pixels[pos] - targetR) <= tolerance &&
+            Math.abs(pixels[pos + 1] - targetG) <= tolerance &&
+            Math.abs(pixels[pos + 2] - targetB) <= tolerance &&
+            Math.abs(pixels[pos + 3] - targetA) <= tolerance;
+    };
+
+    const floodFill = (startX: number, startY: number) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
+
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const rect = canvas.getBoundingClientRect();
-        const x = Math.floor(e.clientX - rect.left);
-        const y = Math.floor(e.clientY - rect.top);
-
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const pixels = imageData.data;
+        const expandPixels = 3;
 
-        const startPos = (y * canvas.width + x) * 4;
-        const startR = pixels[startPos];
-        const startG = pixels[startPos + 1];
-        const startB = pixels[startPos + 2];
-        const startA = pixels[startPos + 3];
+        // Get target color from clicked pixel
+        const startPos = (startY * canvas.width + startX) * 4;
+        const targetR = pixels[startPos];
+        const targetG = pixels[startPos + 1];
+        const targetB = pixels[startPos + 2];
+        const targetA = pixels[startPos + 3];
 
-        const fillR = parseInt(color.slice(1, 3), 16);
-        const fillG = parseInt(color.slice(3, 5), 16);
-        const fillB = parseInt(color.slice(5, 7), 16);
+        // Convert fill color from hex to RGBA
+        const fillColor = document.createElement('canvas').getContext('2d')!;
+        fillColor.fillStyle = color;
+        fillColor.fillRect(0, 0, 1, 1);
+        const fillRGBA = fillColor.getImageData(0, 0, 1, 1).data;
 
-        const stack = [[x, y]];
-        const visited = new Set();
+        // Don't fill if clicking on same color (with tolerance)
+        if (colorMatch(startPos, fillRGBA[0], fillRGBA[1], fillRGBA[2], fillRGBA[3], pixels)) return;
+
+        const stack: [number, number][] = [[startX, startY]];
+        const filledPixels = new Set<string>();
+        const visited = new Set<string>();
 
         while (stack.length) {
             const [x, y] = stack.pop()!;
+            const key = `${x},${y}`;
 
-            // Fill a 7x7 square (3 pixels in each direction from center)
-            for (let dx = -3; dx <= 3; dx++) {
-                for (let dy = -3; dy <= 3; dy++) {
+            if (visited.has(key)) continue;
+            visited.add(key);
+
+            const pos = (y * canvas.width + x) * 4;
+
+            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
+            if (!colorMatch(pos, targetR, targetG, targetB, targetA, pixels)) continue;
+
+            // Add to filled pixels set
+            filledPixels.add(key);
+
+            // Add neighbors to stack
+            stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+        }
+
+        // After finding all connected pixels, fill them with expansion
+        for (const key of filledPixels) {
+            const [x, y] = key.split(',').map(Number);
+
+            // Fill the expanded area around each filled pixel
+            for (let dy = -expandPixels; dy <= expandPixels; dy++) {
+                for (let dx = -expandPixels; dx <= expandPixels; dx++) {
                     const newX = x + dx;
                     const newY = y + dy;
-                    const key = `${newX},${newY}`;
-
-                    if (visited.has(key)) continue;
-                    visited.add(key);
 
                     if (newX < 0 || newX >= canvas.width || newY < 0 || newY >= canvas.height) continue;
 
-                    const pos = (newY * canvas.width + newX) * 4;
-                    if (pixels[pos] !== startR || pixels[pos + 1] !== startG ||
-                        pixels[pos + 2] !== startB || pixels[pos + 3] !== startA) continue;
-
-                    pixels[pos] = fillR;
-                    pixels[pos + 1] = fillG;
-                    pixels[pos + 2] = fillB;
-                    pixels[pos + 3] = 255;
-
-                    // Only add the center pixel's neighbors to the stack
-                    if (dx === 0 && dy === 0) {
-                        stack.push([newX + 1, newY], [newX - 1, newY],
-                            [newX, newY + 1], [newX, newY - 1]);
-                    }
+                    const newPos = (newY * canvas.width + newX) * 4;
+                    pixels[newPos] = fillRGBA[0];
+                    pixels[newPos + 1] = fillRGBA[1];
+                    pixels[newPos + 2] = fillRGBA[2];
+                    pixels[newPos + 3] = fillRGBA[3];
                 }
             }
         }
 
         ctx.putImageData(imageData, 0, 0);
-        saveState();
+        saveState(); // Save state after flood fill
     };
 
     // methods
     function undo() {
-        if (undoStack.length === 0) return;
+        console.log('First: ' + undoStack.length);
+        // if (undoStack.length <= 1) return;
 
-        const ctx = canvasRef.current?.getContext('2d');
+        const canvas = canvasRef.current;
+        if (canvas == null) return;
+        const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Remove the current state from the stack
+        // Remove the current state
         const newStack = [...undoStack];
-        const previousState = newStack.pop();
+        newStack.pop(); // Remove current state
+        const previousState = newStack[newStack.length - 1]; // Get the previous state without removing it
+
         setUndoStack(newStack);
+        console.log(undoStack.length);
 
         // Load the previous state
         if (previousState) {
@@ -219,11 +276,11 @@ export default function Method2Page() {
                     Fill
                 </button>
                 <button
-                    className={`px-4 py-2 rounded bg-gray-200 ${undoStack.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`px-4 py-2 rounded bg-gray-200 ${undoStack.length <= 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
                     onClick={undo}
-                    disabled={undoStack.length === 0}
+                    disabled={undoStack.length <= 1}
                 >
-                    IK BRUG!!!
+                    Undo
                 </button>
                 <button
                     className="px-4 py-2 rounded bg-red-500 text-white"
@@ -240,7 +297,7 @@ export default function Method2Page() {
                     onMouseDown={startDrawing}
                     onMouseMove={draw}
                     onMouseUp={stopDrawing}
-                    onMouseLeave={stopDrawing}
+                    onMouseLeave={mouseLeave}
                     onMouseEnter={() => setIsCursorInCanvas(true)}
                 />
             </div>
@@ -248,7 +305,7 @@ export default function Method2Page() {
             <CustomCursor
                 brushSize={brushSize}
                 color={tool === 'eraser' ? '#000000' : color}
-                hidden={isCursorInCanvas}
+                hidden={!isCursorInCanvas}
                 mouseLocation={mousePosition}
             />
         </main>
