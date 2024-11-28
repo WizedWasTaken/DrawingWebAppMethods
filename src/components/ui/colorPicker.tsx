@@ -36,7 +36,7 @@ const ColorPicker = forwardRef<
 
         return (
             <Popover onOpenChange={setOpen} open={open}>
-                <PopoverTrigger asChild disabled={disabled} onBlur={onBlur}>
+                <PopoverTrigger asChild disabled={disabled} onBlur={onBlur} className='border-2 border-black'>
                     <Button
                         {...props}
                         className={cn('block', className)}

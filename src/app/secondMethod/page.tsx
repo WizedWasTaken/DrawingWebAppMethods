@@ -6,11 +6,12 @@ import { useState, useRef, useEffect } from "react";
 
 export default function Method2Page() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [color, setColor] = useState("#000000");
-    const [brushSize, setBrushSize] = useState(20);
+    const [color, setColor] = useState("#c81fd8");
+    const [brushSize, setBrushSize] = useState(5);
     const [isDrawing, setIsDrawing] = useState(false);
     const [tool, setTool] = useState<'brush' | 'eraser' | 'fill'>('brush');
     const [undoStack, setUndoStack] = useState<string[]>([]);
+    const [redoStack, setRedoStack] = useState<string[]>([]);
     const [mousePosition, setMousePosition] = useState<[number, number]>([0, 0]);
     const [isCursorInCanvas, setIsCursorInCanvas] = useState<boolean>(true);
     const lastPos = useRef<{ x: number; y: number } | null>(null);
@@ -51,6 +52,7 @@ export default function Method2Page() {
             }
             return prev;
         });
+        setRedoStack([]);
     };
 
     const draw = (e: React.MouseEvent) => {
@@ -65,7 +67,14 @@ export default function Method2Page() {
         ctx.beginPath();
         ctx.lineCap = 'round';
         ctx.lineWidth = brushSize;
-        ctx.strokeStyle = tool === 'eraser' ? '#FFFFFF' : color;
+
+        if (tool === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.strokeStyle = 'rgba(0,0,0,1)';
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = color;
+        }
 
         if (lastPos.current) {
             ctx.moveTo(lastPos.current.x, lastPos.current.y);
@@ -194,31 +203,50 @@ export default function Method2Page() {
 
     // methods
     function undo() {
-        console.log('First: ' + undoStack.length);
-        // if (undoStack.length <= 1) return;
+        if (undoStack.length <= 1) return;
 
         const canvas = canvasRef.current;
-        if (canvas == null) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (!canvas || !canvas.getContext('2d')) return;
 
-        // Remove the current state
-        const newStack = [...undoStack];
-        newStack.pop(); // Remove current state
-        const previousState = newStack[newStack.length - 1]; // Get the previous state without removing it
+        const newUndoStack = [...undoStack];
+        const currentState = newUndoStack.pop()!; // Remove current state
+        const previousState = newUndoStack[newUndoStack.length - 1]; // Get the previous state
 
-        setUndoStack(newStack);
-        console.log(undoStack.length);
+        // Add the undone state to redo stack
+        setRedoStack(prev => [...prev, currentState]);
+        setUndoStack(newUndoStack);
 
         // Load the previous state
         if (previousState) {
             const img = new Image();
             img.onload = () => {
-                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                const ctx = canvas.getContext('2d')!;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(img, 0, 0);
             };
             img.src = previousState;
         }
+    }
+
+    function redo() {
+        if (redoStack.length === 0) return;
+
+        const canvas = canvasRef.current;
+        if (!canvas || !canvas.getContext('2d')) return;
+
+        const newRedoStack = [...redoStack];
+        const nextState = newRedoStack.pop()!;
+
+        setRedoStack(newRedoStack);
+        setUndoStack(prev => [...prev, nextState]);
+
+        const img = new Image();
+        img.onload = () => {
+            const ctx = canvas.getContext('2d')!;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+        };
+        img.src = nextState;
     }
 
     function clearCanvas() {
@@ -226,7 +254,8 @@ export default function Method2Page() {
         if (!ctx) return;
 
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        setUndoStack([]);
+        setRedoStack([]); // Clear redo stack when canvas is cleared
+        saveState();
     }
 
 
@@ -283,6 +312,13 @@ export default function Method2Page() {
                     Undo
                 </button>
                 <button
+                    className={`px-4 py-2 rounded bg-gray-200 ${redoStack.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={redo}
+                    disabled={redoStack.length === 0}
+                >
+                    Redo
+                </button>
+                <button
                     className="px-4 py-2 rounded bg-red-500 text-white"
                     onClick={clearCanvas}
                 >
@@ -293,7 +329,7 @@ export default function Method2Page() {
             <div className="relative flex-grow">
                 <canvas
                     ref={canvasRef}
-                    className="absolute inset-0 w-full h-full border-2 border-black bg-white"
+                    className="absolute inset-0 w-full h-full border-2 border-black bg-white cursor-none"
                     onMouseDown={startDrawing}
                     onMouseMove={draw}
                     onMouseUp={stopDrawing}
